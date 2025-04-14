@@ -1,0 +1,15 @@
+[package]
+name = "lua-utf8-rs"
+edition = "2024"
+authors = ["SkyyySi"]
+categories = ["algorithms", "text-processing"]
+license = "MIT OR Apache-2.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+mlua = { version = "0.10.3", features = ["luajit", "module", "serialize", "macros", "anyhow"] }
+once_cell = "1.21.3"
+regex = "1.11.1"
+unicode-segmentation = "1.12.0"

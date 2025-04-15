@@ -1,13 +1,5 @@
 pcall(require, "startup")
 
----@class utf8_rs
----@field check_is_valid          fun(str: string): (is_valid: boolean, str_or_error: string)
----@field get_chars               fun(str: string): chars: string[]
----@field get_graphemes           fun(str: string): graphemes: string[]
----@field get_codepoints          fun(str: string): codepoints: integer[]
----@field char_to_codepoint       fun(char: string): codepoint: integer
----@field codepoint_to_char       fun(codepoint: integer): char: string
----@field calculate_display_width fun(str: string, ignore_graphemes?: boolean, ignore_ansi_escapes?: boolean): display_width: integer
 local utf8_rs = require("utf8_rs")
 print(utf8_rs)
 

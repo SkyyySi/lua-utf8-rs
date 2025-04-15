@@ -4,21 +4,21 @@ use once_cell::sync::Lazy;
 use unicode_segmentation::UnicodeSegmentation;
 
 macro_rules! namespace {
-	($lua: expr, $($name: ident),* $(,)?) => {
+	($lua:expr, [ $($name:ident),* $(,)? ] $(,)?) => {
 		{
-			let namespace: ::mlua::Table = ($lua).create_table()?;
+			let ns: ::mlua::Table = ($lua).create_table()?;
 
 			$(
-				namespace.set(stringify!($name), ($lua).create_function($name)?)?;
+				ns.set(stringify!($name), ($lua).create_function($name)?)?;
 			)*
 
-			Ok(namespace)
+			::mlua::Result::<::mlua::Table>::Ok(ns)
 		}
 	};
 }
 
 macro_rules! multi_value {
-	($lua: expr, $($e: expr),* $(,)?) => {
+	($lua:expr, [ $($e:expr),* $(,)? ] $(,)?) => {
 		{
 			let mut values = ::std::vec::Vec::<::mlua::Value>::new();
 
@@ -31,16 +31,76 @@ macro_rules! multi_value {
 	};
 }
 
+#[allow(unused)]
+macro_rules! match_or_bail {
+	() => {
+		todo!()
+	};
+}
+
+#[allow(unused, non_snake_case)]
+fn check_is_valid_NEW_TEMP<I: Iterator<Item = u8>>(mut iter: I) -> bool {
+	let mut needed = 0;
+
+	while let Some(byte) = iter.next() {
+		if needed == 0 {
+			match byte {
+				0x00..=0x7F => continue, // ASCII
+				0xC2..=0xDF => needed = 1,
+				0xE0..=0xEF => {
+					needed = 2;
+					// Check for overlongs and surrogates
+					let next = match iter.next() {
+						Some(b) => b,
+						None => return false,
+					};
+					match byte {
+						0xE0 if next < 0xA0 || next > 0xBF => return false,
+						0xED if next > 0x9F => return false,
+						0xE1..=0xEC | 0xEE..=0xEF if next < 0x80 || next > 0xBF => return false,
+						_ => {}
+					}
+					needed = 1;
+					continue;
+				}
+				0xF0..=0xF4 => {
+					needed = 3;
+					let next = match iter.next() {
+						Some(b) => b,
+						None => return false,
+					};
+					match byte {
+						0xF0 if next < 0x90 || next > 0xBF => return false,
+						0xF4 if next > 0x8F => return false,
+						0xF1..=0xF3 if next < 0x80 || next > 0xBF => return false,
+						_ => {}
+					}
+					needed = 2;
+					continue;
+				}
+				_ => return false, // invalid first byte
+			}
+		} else {
+			if byte < 0x80 || byte > 0xBF {
+				return false;
+			}
+			needed -= 1;
+		}
+	}
+
+	needed == 0
+}
+
 fn check_is_valid(lua: &Lua, string: LuaString) -> LuaResult<LuaMultiValue> {
 	let result: LuaResult<mlua::BorrowedStr<'_>> = string.to_str();
 
 	multi_value![
 		lua,
-		result.is_ok(),
+		[result.is_ok(),
 		match result {
 			Ok(_) => string.into_lua(lua)?,
 			Err(error) => error.to_string().into_lua(lua)?,
-		},
+		},]
 	]
 }
 
@@ -112,7 +172,8 @@ fn codepoint_to_char(_lua: &Lua, codepoint: LuaInteger) -> LuaResult<String> {
 }
 
 static ANSI_ESCAPE_PATTERN: Lazy<Regex> = Lazy::new(|| {
-	Regex::new(r"\x1b\[[0-9]+(?:;[0-9]+)*[a-zA-Z]").unwrap()
+	Regex::new(r"\x1b\[[0-9]+(?:;[0-9]+)*[a-zA-Z]")
+		.expect("Failed to compile Regex pattern for matching ANSI escape sequences!")
 });
 
 fn calculate_display_width(_lua: &Lua, args: (String, Option<bool>, Option<bool>)) -> LuaResult<LuaInteger> {
@@ -137,14 +198,16 @@ fn calculate_display_width(_lua: &Lua, args: (String, Option<bool>, Option<bool>
 
 #[mlua::lua_module]
 fn utf8_rs(lua: &Lua) -> LuaResult<LuaTable> {
-	namespace!(
+	let ns = namespace!(
 		lua,
-		check_is_valid,
+		[check_is_valid,
 		get_chars,
 		get_graphemes,
 		get_codepoints,
 		char_to_codepoint,
 		codepoint_to_char,
-		calculate_display_width,
-	)
+		calculate_display_width,]
+	)?;
+
+	Ok(ns)
 }
